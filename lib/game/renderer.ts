@@ -25,7 +25,7 @@ let loadingPromise: Promise<void> | null = null;
 let frameCount = 0;
 let cloud1X = 20;
 let cloud2X = 170;
-let waveOffset = 0;
+let punchEffectTimer = 0;
 
 export function isAssetsLoaded(): boolean {
   return assetsLoaded;
@@ -135,14 +135,6 @@ function drawGround(ctx: CanvasRenderingContext2D) {
   }
 }
 
-function drawWaves(ctx: CanvasRenderingContext2D) {
-  // 파도: 화면 하단에 wave 타일이 좌우로 흐르는 애니메이션
-  const waveY = GROUND_HEIGHT - 32;
-  const offset = Math.floor(waveOffset) % 16;
-  for (let x = -16 + offset; x < GROUND_WIDTH + 16; x += 16) {
-    drawSprite(ctx, "objects/wave.png", x, waveY);
-  }
-}
 
 // ─── 네트 ───
 
@@ -238,18 +230,26 @@ function drawBall(ctx: CanvasRenderingContext2D, ball: BallSync) {
   // 공 본체
   ctx.drawImage(spriteSheetImage, sx, sy, sw, sh, ball.x - BALL_RADIUS, ball.y - BALL_RADIUS, 40, 40);
 
-  // 펀치 이펙트 (punchEffectX/Y 좌표에 표시)
+  // 펀치 이펙트 (punchEffectX/Y 좌표에 타이머로 페이드아웃)
   if (ball.isPowerHit && ball.punchEffectX > 0) {
+    punchEffectTimer = 12; // 약 0.2초 (60fps 기준)
+  }
+  if (punchEffectTimer > 0 && ball.punchEffectX > 0) {
     const punchFrame = getFrame("ball/ball_punch.png");
     if (punchFrame) {
+      const alpha = punchEffectTimer / 12;
+      const scale = 1 + (1 - alpha) * 0.5; // 약간 커지면서 사라짐
+      const size = 40 * scale;
+      ctx.globalAlpha = alpha;
       ctx.drawImage(
         spriteSheetImage,
         punchFrame.frame.x, punchFrame.frame.y,
         punchFrame.frame.w, punchFrame.frame.h,
-        ball.punchEffectX - BALL_RADIUS,
-        ball.punchEffectY - BALL_RADIUS,
-        40, 40,
+        ball.punchEffectX - size / 2,
+        ball.punchEffectY - size / 2,
+        size, size,
       );
+      ctx.globalAlpha = 1;
     }
   }
 }
@@ -333,7 +333,7 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState) {
   cloud2X += 0.15;
   if (cloud1X > GROUND_WIDTH) cloud1X = -48;
   if (cloud2X > GROUND_WIDTH) cloud2X = -48;
-  waveOffset += 0.5;
+  if (punchEffectTimer > 0) punchEffectTimer--;
 
   ctx.clearRect(0, 0, GROUND_WIDTH, GROUND_HEIGHT);
 
@@ -342,7 +342,6 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState) {
   drawClouds(ctx);
   drawMountain(ctx);
   drawGround(ctx);
-  drawWaves(ctx);
   drawNet(ctx);
 
   if (state.phase === "playing" || state.phase === "scored" || state.phase === "gameOver") {
