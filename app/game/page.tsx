@@ -100,7 +100,7 @@ function GameContent() {
       if (currentState.phase !== "playing") return;
 
       const input = inputManager.getInput();
-      const inputKey = `${input.left}${input.right}${input.up}`;
+      const inputKey = `${input.xDirection}${input.yDirection}${input.powerHit}`;
 
       if (inputKey !== lastInputRef.current) {
         socket.send({ type: "input", input });
@@ -115,7 +115,7 @@ function GameContent() {
     };
   }, [roomId, side, router, handleMessage]);
 
-  const handleTouchInput = useCallback((state: Partial<InputState>) => {
+  const handleTouchInput = useCallback((state: { left?: boolean; right?: boolean; up?: boolean; powerHit?: boolean }) => {
     if (inputManagerRef.current) {
       inputManagerRef.current.setTouchInput(state);
     }
@@ -158,7 +158,7 @@ function GameContent() {
 
       {gameState.phase === "playing" && (
         <p className="hidden font-mono text-[10px] text-gray-700 sm:block">
-          ←→/AD: move | ↑/W/Space/Enter: jump (air=spike)
+          ←→: move | ↑: jump | Enter: spike/dive | ↓+Enter: smash
         </p>
       )}
 

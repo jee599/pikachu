@@ -29,6 +29,8 @@ export function createInitialBall(servingSide: PlayerSide): BallSync {
     rotation: 0,
     fineRotation: 0,
     isPowerHit: false,
+    punchEffectX: 0,
+    punchEffectY: 0,
   };
 }
 

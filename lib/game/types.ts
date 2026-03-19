@@ -46,6 +46,8 @@ export interface BallSync {
   rotation: number;
   fineRotation: number;
   isPowerHit: boolean;
+  punchEffectX: number;
+  punchEffectY: number;
 }
 
 export interface GameStateSync {
@@ -58,9 +60,9 @@ export interface GameStateSync {
 }
 
 export interface InputState {
-  left: boolean;
-  right: boolean;
-  up: boolean;
+  xDirection: -1 | 0 | 1;
+  yDirection: -1 | 0 | 1;
+  powerHit: boolean;
 }
 
 export interface GameState {

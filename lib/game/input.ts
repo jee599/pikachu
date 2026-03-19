@@ -2,7 +2,10 @@ import { type InputState } from "./types";
 
 export class InputManager {
   private keys: Set<string> = new Set();
-  private touchState: Partial<InputState> = {};
+  private touchLeft = false;
+  private touchRight = false;
+  private touchUp = false;
+  private touchPowerHit = false;
   private boundKeyDown: (e: KeyboardEvent) => void;
   private boundKeyUp: (e: KeyboardEvent) => void;
 
@@ -23,7 +26,8 @@ export class InputManager {
 
   private onKeyDown(e: KeyboardEvent) {
     if (
-      ["ArrowLeft", "ArrowRight", "ArrowUp", " ", "w", "a", "d", "Enter"].includes(e.key)
+      ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown",
+       " ", "w", "a", "s", "d", "Enter"].includes(e.key)
     ) {
       e.preventDefault();
     }
@@ -34,30 +38,29 @@ export class InputManager {
     this.keys.delete(e.key);
   }
 
-  setTouchInput(state: Partial<InputState>) {
-    this.touchState = state;
+  setTouchInput(state: { left?: boolean; right?: boolean; up?: boolean; powerHit?: boolean }) {
+    if (state.left !== undefined) this.touchLeft = state.left;
+    if (state.right !== undefined) this.touchRight = state.right;
+    if (state.up !== undefined) this.touchUp = state.up;
+    if (state.powerHit !== undefined) this.touchPowerHit = state.powerHit;
   }
 
   getInput(): InputState {
-    const left =
-      this.keys.has("ArrowLeft") ||
-      this.keys.has("a") ||
-      this.keys.has("A") ||
-      !!this.touchState.left;
-    const right =
-      this.keys.has("ArrowRight") ||
-      this.keys.has("d") ||
-      this.keys.has("D") ||
-      !!this.touchState.right;
-    const up =
-      this.keys.has("ArrowUp") ||
-      this.keys.has(" ") ||
-      this.keys.has("w") ||
-      this.keys.has("W") ||
-      this.keys.has("Enter") ||
-      !!this.touchState.up;
+    const left = this.keys.has("ArrowLeft") || this.keys.has("a") || this.keys.has("A") || this.touchLeft;
+    const right = this.keys.has("ArrowRight") || this.keys.has("d") || this.keys.has("D") || this.touchRight;
+    const up = this.keys.has("ArrowUp") || this.keys.has(" ") || this.keys.has("w") || this.keys.has("W") || this.touchUp;
+    const down = this.keys.has("ArrowDown") || this.keys.has("s") || this.keys.has("S");
+    const powerHit = this.keys.has("Enter") || this.touchPowerHit;
 
-    return { left, right, up };
+    let xDirection: -1 | 0 | 1 = 0;
+    if (left && !right) xDirection = -1;
+    else if (right && !left) xDirection = 1;
+
+    let yDirection: -1 | 0 | 1 = 0;
+    if (up && !down) yDirection = -1;
+    else if (down && !up) yDirection = 1;
+
+    return { xDirection, yDirection, powerHit };
   }
 
   isAnyKeyPressed(): boolean {
@@ -66,6 +69,5 @@ export class InputManager {
 
   reset() {
     this.keys.clear();
-    this.touchState = {};
   }
 }

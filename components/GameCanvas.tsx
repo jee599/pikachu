@@ -37,6 +37,8 @@ function lerpBall(a: BallSync, b: BallSync, t: number): BallSync {
     rotation: b.rotation,
     fineRotation: b.fineRotation,
     isPowerHit: b.isPowerHit,
+    punchEffectX: b.punchEffectX,
+    punchEffectY: b.punchEffectY,
   };
 }
 

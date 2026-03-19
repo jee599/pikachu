@@ -6,7 +6,6 @@ import {
   GROUND_HALF_WIDTH,
   PLAYER_HALF_LENGTH,
   PLAYER_TOUCHING_GROUND_Y,
-  BALL_RADIUS,
   BALL_TOUCHING_GROUND_Y,
   NET_PILLAR_HALF_WIDTH,
   NET_PILLAR_TOP_TOP_Y,
@@ -21,27 +20,28 @@ import {
   PLAYER2_X_MIN,
   PLAYER2_X_MAX,
   PLAYER_WALK_SPEED,
+  PLAYER_DIVE_SPEED,
   PLAYER_JUMP_VELOCITY,
+  PLAYER_DIVE_VELOCITY,
   GRAVITY,
   WINNING_SCORE,
+  BALL_RADIUS,
   PlayerState,
 } from './types.js';
 
-// 내부 플레이어 상태 (서버 전용)
 interface InternalPlayer {
   x: number;
   y: number;
   yVelocity: number;
   state: number;
   frameNumber: number;
-  isCollisionWithBallHappened: boolean;
-  lyingDownDurationLeft: number;
+  delayBeforeNextFrame: number;
   divingDirection: number;
-  prevUpInput: boolean;
-  powerHitTicks: number; // 파워히트 상태 진입 후 경과 틱
+  lyingDownDurationLeft: number;
+  isCollisionWithBallHappened: boolean;
+  prevPowerHitInput: boolean;
 }
 
-// 내부 공 상태 (서버 전용)
 interface InternalBall {
   x: number;
   y: number;
@@ -50,7 +50,11 @@ interface InternalBall {
   rotation: number;
   fineRotation: number;
   isPowerHit: boolean;
+  punchEffectX: number;
+  punchEffectY: number;
 }
+
+const DEFAULT_INPUT: InputState = { xDirection: 0, yDirection: 0, powerHit: false };
 
 export class Game {
   player1: InternalPlayer;
@@ -60,19 +64,17 @@ export class Game {
   phase: GameStateSync['phase'];
   servingSide: PlayerSide;
   inputs: { left: InputState; right: InputState };
-  private tickCounter: number = 0;
+  gameEnded: boolean;
 
   constructor() {
     this.score = { left: 0, right: 0 };
     this.servingSide = 'left';
     this.phase = 'playing';
+    this.gameEnded = false;
     this.player1 = this.createPlayer('left');
     this.player2 = this.createPlayer('right');
     this.ball = this.createBall('left');
-    this.inputs = {
-      left: { left: false, right: false, up: false },
-      right: { left: false, right: false, up: false },
-    };
+    this.inputs = { left: { ...DEFAULT_INPUT }, right: { ...DEFAULT_INPUT } };
   }
 
   private createPlayer(side: PlayerSide): InternalPlayer {
@@ -82,11 +84,11 @@ export class Game {
       yVelocity: 0,
       state: PlayerState.IDLE,
       frameNumber: 0,
-      isCollisionWithBallHappened: false,
-      lyingDownDurationLeft: 0,
+      delayBeforeNextFrame: 0,
       divingDirection: 0,
-      prevUpInput: false,
-      powerHitTicks: 0,
+      lyingDownDurationLeft: 0,
+      isCollisionWithBallHappened: false,
+      prevPowerHitInput: false,
     };
   }
 
@@ -95,42 +97,46 @@ export class Game {
       x: servingSide === 'left' ? BALL_P1_SERVE_X : BALL_P2_SERVE_X,
       y: BALL_INITIAL_Y,
       xVelocity: 0,
-      yVelocity: 0,
+      yVelocity: 1,
       rotation: 0,
       fineRotation: 0,
       isPowerHit: false,
+      punchEffectX: 0,
+      punchEffectY: 0,
     };
   }
 
   resetRound(servingSide: PlayerSide): void {
     this.servingSide = servingSide;
     this.phase = 'playing';
+    this.gameEnded = false;
     this.player1 = this.createPlayer('left');
     this.player2 = this.createPlayer('right');
     this.ball = this.createBall(servingSide);
-    this.inputs = {
-      left: { left: false, right: false, up: false },
-      right: { left: false, right: false, up: false },
-    };
+    this.inputs = { left: { ...DEFAULT_INPUT }, right: { ...DEFAULT_INPUT } };
   }
 
   tick(): { scorer: PlayerSide } | null {
-    this.tickCounter++;
-    this.updatePlayer(this.player1, this.inputs.left, 'left');
-    this.updatePlayer(this.player2, this.inputs.right, 'right');
-    this.updateBall();
+    this.processPlayer(this.player1, this.inputs.left, 'left');
+    this.processPlayer(this.player2, this.inputs.right, 'right');
 
-    // 공-플레이어 충돌
-    this.handlePlayerBallCollision(this.player1);
-    this.handlePlayerBallCollision(this.player2);
+    // 공 물리
+    this.ball.yVelocity += GRAVITY;
+    this.ball.x += this.ball.xVelocity;
+    this.ball.y += this.ball.yVelocity;
 
     // 공-월드 충돌
     this.handleBallWorldCollision();
 
+    // 공-플레이어 충돌
+    this.handlePlayerBallCollision(this.player1, this.inputs.left);
+    this.handlePlayerBallCollision(this.player2, this.inputs.right);
+
     // 공 회전
     this.ball.fineRotation += Math.floor(this.ball.xVelocity / 2);
-    this.ball.rotation = Math.floor(this.ball.fineRotation / 10) % 5;
-    if (this.ball.rotation < 0) this.ball.rotation += 5;
+    if (this.ball.fineRotation < 0) this.ball.fineRotation += 50;
+    if (this.ball.fineRotation >= 50) this.ball.fineRotation -= 50;
+    this.ball.rotation = Math.floor(this.ball.fineRotation / 10);
 
     // 바닥 충돌 → 득점 판정
     if (this.ball.y > BALL_TOUCHING_GROUND_Y) {
@@ -146,6 +152,16 @@ export class Game {
     if (this.score.left >= WINNING_SCORE) return { winner: 'left' };
     if (this.score.right >= WINNING_SCORE) return { winner: 'right' };
     return null;
+  }
+
+  setWinLoseState(winner: PlayerSide): void {
+    this.gameEnded = true;
+    const winPlayer = winner === 'left' ? this.player1 : this.player2;
+    const losePlayer = winner === 'left' ? this.player2 : this.player1;
+    winPlayer.state = PlayerState.WIN_CELEBRATION;
+    winPlayer.frameNumber = 0;
+    losePlayer.state = PlayerState.LOSING;
+    losePlayer.frameNumber = 0;
   }
 
   getState(): GameStateSync {
@@ -172,6 +188,8 @@ export class Game {
         rotation: this.ball.rotation,
         fineRotation: this.ball.fineRotation,
         isPowerHit: this.ball.isPowerHit,
+        punchEffectX: this.ball.punchEffectX,
+        punchEffectY: this.ball.punchEffectY,
       },
       score: { ...this.score },
       phase: this.phase,
@@ -179,115 +197,107 @@ export class Game {
     };
   }
 
-  private updatePlayer(
-    player: InternalPlayer,
-    input: InputState,
-    side: PlayerSide,
-  ): void {
+  private processPlayer(player: InternalPlayer, input: InputState, side: PlayerSide): void {
     const xMin = side === 'left' ? PLAYER1_X_MIN : PLAYER2_X_MIN;
     const xMax = side === 'left' ? PLAYER1_X_MAX : PLAYER2_X_MAX;
 
-    // 누워있는 상태 처리
+    // powerHit edge detection (서버에서 처리)
+    const powerHitJustPressed = input.powerHit && !player.prevPowerHitInput;
+    player.prevPowerHitInput = input.powerHit;
+
+    // state 4 (누워있기): 아무것도 안 함, 카운트다운만
     if (player.state === PlayerState.LYING_DOWN) {
       player.lyingDownDurationLeft--;
-      if (player.lyingDownDurationLeft <= 0) {
+      if (player.lyingDownDurationLeft < -1) {
         player.state = PlayerState.IDLE;
         player.frameNumber = 0;
       }
       return;
     }
 
-    // 다이빙 상태 처리
-    if (player.state === PlayerState.DIVING) {
-      player.x += player.divingDirection * PLAYER_WALK_SPEED * 2;
-      player.yVelocity += GRAVITY;
-      player.y += player.yVelocity;
-
-      if (player.y >= PLAYER_TOUCHING_GROUND_Y) {
-        player.y = PLAYER_TOUCHING_GROUND_Y;
-        player.yVelocity = 0;
-        player.state = PlayerState.LYING_DOWN;
-        player.lyingDownDurationLeft = 3;
-      }
-
-      player.x = Math.max(xMin, Math.min(xMax, player.x));
-      return;
-    }
-
-    // up 키가 이번 틱에 새로 눌렸는지 (edge detection)
-    const upJustPressed = input.up && !player.prevUpInput;
-
-    // 지상에 있을 때 (yVelocity < 0이면 막 점프한 것이므로 공중 처리)
-    if (player.y >= PLAYER_TOUCHING_GROUND_Y && player.yVelocity >= 0) {
-      // 걷기
-      if (input.left) player.x -= PLAYER_WALK_SPEED;
-      if (input.right) player.x += PLAYER_WALK_SPEED;
-
-      // 점프 (지상에서 ↑ 새로 누름)
-      if (upJustPressed) {
-        player.yVelocity = PLAYER_JUMP_VELOCITY;
-        player.state = PlayerState.JUMPING;
-        player.frameNumber = 0;
+    // state 5, 6 (승리/패배): 프레임 애니메이션만
+    if (player.state >= PlayerState.WIN_CELEBRATION) {
+      if (player.delayBeforeNextFrame < 4) {
+        player.delayBeforeNextFrame++;
       } else {
-        player.state = PlayerState.IDLE;
+        player.delayBeforeNextFrame = 0;
+        if (player.frameNumber < 4) player.frameNumber++;
       }
-    } else {
-      // 공중에서
-      player.yVelocity += GRAVITY;
-      player.y += player.yVelocity;
+      return;
+    }
 
-      // 공중에서 좌우 이동
-      if (input.left) player.x -= PLAYER_WALK_SPEED;
-      if (input.right) player.x += PLAYER_WALK_SPEED;
+    // 이동 (state < 3)
+    if (player.state < PlayerState.DIVING) {
+      player.x += input.xDirection * PLAYER_WALK_SPEED;
+    } else if (player.state === PlayerState.DIVING) {
+      player.x += player.divingDirection * PLAYER_DIVE_SPEED;
+    }
 
-      // 파워 히트 (공중에서 ↑ 새로 누름)
-      if (upJustPressed && player.state === PlayerState.JUMPING) {
-        player.state = PlayerState.JUMPING_POWER_HIT;
+    // 경계 제한
+    player.x = Math.max(xMin, Math.min(xMax, player.x));
+
+    // 점프: state < 3 + yDirection == -1 + 지상
+    if (player.state < PlayerState.DIVING &&
+        input.yDirection === -1 &&
+        player.y === PLAYER_TOUCHING_GROUND_Y) {
+      player.yVelocity = PLAYER_JUMP_VELOCITY;
+      player.state = PlayerState.JUMPING;
+      player.frameNumber = 0;
+    }
+
+    // 파워히트: 점프 중(state 1) + powerHit 새로 누름
+    if (powerHitJustPressed && player.state === PlayerState.JUMPING) {
+      player.state = PlayerState.JUMPING_POWER_HIT;
+      player.frameNumber = 0;
+      player.delayBeforeNextFrame = 5;
+    }
+
+    // 다이빙: 지상(state 0) + powerHit 새로 누름 + 방향 입력
+    if (powerHitJustPressed &&
+        player.state === PlayerState.IDLE &&
+        input.xDirection !== 0) {
+      player.state = PlayerState.DIVING;
+      player.frameNumber = 0;
+      player.divingDirection = input.xDirection;
+      player.yVelocity = PLAYER_DIVE_VELOCITY;
+    }
+
+    // 중력 + y이동 (매 프레임 무조건 적용 — 원본 동일)
+    player.yVelocity += GRAVITY;
+    player.y += player.yVelocity;
+
+    // 착지 판정
+    if (player.y > PLAYER_TOUCHING_GROUND_Y) {
+      player.y = PLAYER_TOUCHING_GROUND_Y;
+      player.yVelocity = 0;
+
+      if (player.state === PlayerState.DIVING) {
+        player.state = PlayerState.LYING_DOWN;
         player.frameNumber = 0;
-        player.powerHitTicks = 0;
-      }
-
-      // 다이빙 (파워히트 2틱 이후 + 방향키 입력)
-      if (player.state === PlayerState.JUMPING_POWER_HIT) {
-        player.powerHitTicks++;
-        if (player.powerHitTicks > 2) {
-          if (input.left) {
-            player.state = PlayerState.DIVING;
-            player.divingDirection = -1;
-            player.yVelocity = -5;
-          } else if (input.right) {
-            player.state = PlayerState.DIVING;
-            player.divingDirection = 1;
-            player.yVelocity = -5;
-          }
-        }
-      }
-
-      // 착지
-      if (player.y >= PLAYER_TOUCHING_GROUND_Y) {
-        player.y = PLAYER_TOUCHING_GROUND_Y;
-        player.yVelocity = 0;
+        player.lyingDownDurationLeft = 3;
+      } else if (player.state !== PlayerState.IDLE) {
         player.state = PlayerState.IDLE;
         player.frameNumber = 0;
       }
     }
 
-    player.prevUpInput = input.up;
-
-    // 상태별 프레임 애니메이션
+    // 프레임 애니메이션
     this.updatePlayerFrame(player);
-
-    // X 경계 제한
-    player.x = Math.max(xMin, Math.min(xMax, player.x));
   }
 
   private updatePlayerFrame(player: InternalPlayer): void {
     switch (player.state) {
       case PlayerState.IDLE: {
-        // Ping-pong 0→4→0, 4틱마다 변경
-        if (this.tickCounter % 4 === 0) {
-          const cycle = Math.floor(this.tickCounter / 4) % 8;
-          player.frameNumber = cycle < 5 ? cycle : 8 - cycle;
+        if (player.delayBeforeNextFrame < 3) {
+          player.delayBeforeNextFrame++;
+        } else {
+          player.delayBeforeNextFrame = 0;
+          // ping-pong 0→4→0
+          if (player.frameNumber < 4) {
+            player.frameNumber++;
+          } else {
+            player.frameNumber = 0;
+          }
         }
         break;
       }
@@ -295,128 +305,105 @@ export class Game {
         player.frameNumber = (player.frameNumber + 1) % 3;
         break;
       case PlayerState.JUMPING_POWER_HIT:
-        // 0~4 순차 증가 후 멈춤
-        if (player.frameNumber < 4) {
-          player.frameNumber++;
+        if (player.delayBeforeNextFrame > 0) {
+          player.delayBeforeNextFrame--;
+        } else {
+          if (player.frameNumber < 4) {
+            player.frameNumber++;
+          } else {
+            // 파워히트 애니메이션 끝 → 점프로 복귀
+            player.state = PlayerState.JUMPING;
+            player.frameNumber = 0;
+          }
         }
         break;
       case PlayerState.DIVING:
-        // 0~1 순환
         player.frameNumber = (player.frameNumber + 1) % 2;
         break;
       case PlayerState.LYING_DOWN:
         player.frameNumber = 0;
         break;
-      case PlayerState.WIN_CELEBRATION:
-        // 5틱마다 1 증가, 4에서 멈춤
-        if (this.tickCounter % 5 === 0 && player.frameNumber < 4) {
-          player.frameNumber++;
-        }
-        break;
-      case PlayerState.LOSING:
-        // 5틱마다 1 증가, 4에서 멈춤
-        if (this.tickCounter % 5 === 0 && player.frameNumber < 4) {
-          player.frameNumber++;
-        }
-        break;
-      default:
-        player.frameNumber = 0;
-        break;
     }
   }
 
-  private handlePlayerBallCollision(player: InternalPlayer): void {
+  private handlePlayerBallCollision(player: InternalPlayer, input: InputState): void {
     const ball = this.ball;
     const dx = Math.abs(ball.x - player.x);
     const dy = Math.abs(ball.y - player.y);
 
-    // BOX 기반 충돌 판정 (원본 게임과 동일)
     if (dx <= PLAYER_HALF_LENGTH && dy <= PLAYER_HALF_LENGTH) {
       if (!player.isCollisionWithBallHappened) {
         player.isCollisionWithBallHappened = true;
 
-        // X 방향 속도
-        if (ball.x < player.x) {
-          ball.xVelocity = -Math.floor(Math.abs(ball.x - player.x) / 3);
-        } else if (ball.x > player.x) {
-          ball.xVelocity = Math.floor(Math.abs(ball.x - player.x) / 3);
-        } else {
-          // xVelocity == 0이면 랜덤
-          ball.xVelocity = [-1, 0, 1][Math.floor(Math.random() * 3)];
-        }
+        if (player.state === PlayerState.JUMPING_POWER_HIT) {
+          // 파워 히트 충돌
+          // x방향: 공이 코트 왼쪽이면 오른쪽으로, 오른쪽이면 왼쪽으로
+          // abs(xDirection)+1 → 방향키 없으면 10, 있으면 20
+          if (ball.x < GROUND_HALF_WIDTH) {
+            ball.xVelocity = (Math.abs(input.xDirection) + 1) * 10;
+          } else {
+            ball.xVelocity = -(Math.abs(input.xDirection) + 1) * 10;
+          }
+          // y방향: yDirection으로 각도 조절
+          // -1=위로, 0=수평, 1=아래로
+          ball.yVelocity = Math.abs(ball.yVelocity) * input.yDirection * 2;
 
-        if (ball.xVelocity === 0) {
-          ball.xVelocity = [-1, 0, 1][Math.floor(Math.random() * 3)];
-        }
-
-        // Y 방향 속도
-        ball.yVelocity = -Math.max(Math.abs(ball.yVelocity), 15);
-
-        // 파워 히트 판정
-        if (
-          player.state === PlayerState.JUMPING_POWER_HIT ||
-          player.state === PlayerState.DIVING
-        ) {
           ball.isPowerHit = true;
-          // 파워 히트 시 더 강한 X 속도
-          ball.xVelocity = ball.x < player.x ? -10 : 10;
-          ball.yVelocity = -Math.max(Math.abs(ball.yVelocity), 18);
+          ball.punchEffectX = ball.x;
+          ball.punchEffectY = ball.y;
         } else {
+          // 일반 히트
+          if (ball.x < player.x) {
+            ball.xVelocity = -Math.floor(Math.abs(ball.x - player.x) / 3);
+          } else if (ball.x > player.x) {
+            ball.xVelocity = Math.floor(Math.abs(ball.x - player.x) / 3);
+          } else {
+            ball.xVelocity = [-1, 0, 1][Math.floor(Math.random() * 3)];
+          }
+
+          if (ball.xVelocity === 0) {
+            ball.xVelocity = [-1, 0, 1][Math.floor(Math.random() * 3)];
+          }
+
+          // y속도: 최소 15 보장, 위로 반사
+          ball.yVelocity = -Math.max(Math.abs(ball.yVelocity), 15);
           ball.isPowerHit = false;
         }
       }
     } else {
-      // 충돌 영역을 벗어나면 플래그 리셋
       player.isCollisionWithBallHappened = false;
     }
-  }
-
-  private updateBall(): void {
-    const ball = this.ball;
-
-    // 중력
-    ball.yVelocity += GRAVITY;
-
-    // 위치 업데이트
-    ball.x += ball.xVelocity;
-    ball.y += ball.yVelocity;
   }
 
   private handleBallWorldCollision(): void {
     const ball = this.ball;
 
-    // 왼쪽 벽
+    // 왼쪽 벽 (x < 20)
     if (ball.x < BALL_RADIUS) {
       ball.x = BALL_RADIUS;
       ball.xVelocity = -ball.xVelocity;
     }
-
-    // 오른쪽 벽
+    // 오른쪽 벽 (x > 432, 비대칭 — 원본 그대로)
     if (ball.x > GROUND_WIDTH) {
       ball.x = GROUND_WIDTH;
       ball.xVelocity = -ball.xVelocity;
     }
-
     // 천장
     if (ball.y < 0) {
       ball.y = 0;
       ball.yVelocity = 1;
     }
 
-    // 네트 꼭대기 (y: 176~192, |x - 216| < 25)
+    // 네트 충돌
     const distFromNet = Math.abs(ball.x - GROUND_HALF_WIDTH);
     if (distFromNet < NET_PILLAR_HALF_WIDTH) {
-      if (
-        ball.y >= NET_PILLAR_TOP_TOP_Y &&
-        ball.y <= NET_PILLAR_TOP_BOTTOM_Y
-      ) {
-        // 위에서 떨어지는 중이면 바운스
+      // 네트 꼭대기 (y: 176~192)
+      if (ball.y >= NET_PILLAR_TOP_TOP_Y && ball.y <= NET_PILLAR_TOP_BOTTOM_Y) {
         if (ball.yVelocity > 0) {
           ball.yVelocity = -ball.yVelocity;
           ball.y = NET_PILLAR_TOP_TOP_Y;
         }
       }
-
       // 네트 옆면 (y > 192)
       if (ball.y > NET_PILLAR_TOP_BOTTOM_Y) {
         if (ball.x < GROUND_HALF_WIDTH) {

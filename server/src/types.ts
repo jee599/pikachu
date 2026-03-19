@@ -27,17 +27,18 @@ export const PLAYER2_X_MIN = 248;
 export const PLAYER2_X_MAX = 400;
 
 export const PLAYER_WALK_SPEED = 6;
+export const PLAYER_DIVE_SPEED = 8;
 export const PLAYER_JUMP_VELOCITY = -16;
+export const PLAYER_DIVE_VELOCITY = -5;
 export const GRAVITY = 1;
 
 export const WINNING_SCORE = 15;
 export const FPS = 25;
-export const TICK_INTERVAL = 1000 / FPS; // 40ms
+export const TICK_INTERVAL = 1000 / FPS;
 
 export type PlayerSide = 'left' | 'right';
 export type GamePhase = 'waiting' | 'playing' | 'scored' | 'gameOver';
 
-// 피카츄 애니메이션 상태
 export const enum PlayerState {
   IDLE = 0,
   JUMPING = 1,
@@ -64,12 +65,15 @@ export interface BallSync {
   rotation: number;
   fineRotation: number;
   isPowerHit: boolean;
+  punchEffectX: number;
+  punchEffectY: number;
 }
 
+// 클라이언트→서버 입력 (원본 게임 구조)
 export interface InputState {
-  left: boolean;
-  right: boolean;
-  up: boolean;
+  xDirection: -1 | 0 | 1;  // ←: -1, →: 1, 없음: 0
+  yDirection: -1 | 0 | 1;  // ↑: -1, ↓: 1, 없음: 0
+  powerHit: boolean;         // Enter 키 (edge detect는 서버에서)
 }
 
 export interface GameStateSync {

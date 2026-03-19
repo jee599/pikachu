@@ -1,10 +1,16 @@
 "use client";
 
 import { useCallback, useRef, useEffect, useState } from "react";
-import { type InputState } from "@/lib/game/types";
+
+interface TouchInput {
+  left?: boolean;
+  right?: boolean;
+  up?: boolean;
+  powerHit?: boolean;
+}
 
 interface TouchControlsProps {
-  onInput: (state: Partial<InputState>) => void;
+  onInput: (state: TouchInput) => void;
 }
 
 export default function TouchControls({ onInput }: TouchControlsProps) {
@@ -15,46 +21,24 @@ export default function TouchControls({ onInput }: TouchControlsProps) {
     setIsTouchDevice("ontouchstart" in window || navigator.maxTouchPoints > 0);
   }, []);
 
-  const handleJoystickStart = useCallback(
+  const handleJoystick = useCallback(
     (e: React.TouchEvent) => {
       e.preventDefault();
       const touch = e.touches[0];
       const rect = joystickRef.current?.getBoundingClientRect();
       if (!rect || !touch) return;
 
-      const centerX = rect.left + rect.width / 2;
-      const dx = touch.clientX - centerX;
-      const deadzone = rect.width * 0.15;
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const dx = touch.clientX - cx;
+      const dy = touch.clientY - cy;
+      const deadzone = rect.width * 0.12;
 
-      if (dx < -deadzone) {
-        onInput({ left: true, right: false });
-      } else if (dx > deadzone) {
-        onInput({ left: false, right: true });
-      } else {
-        onInput({ left: false, right: false });
-      }
-    },
-    [onInput],
-  );
-
-  const handleJoystickMove = useCallback(
-    (e: React.TouchEvent) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      const rect = joystickRef.current?.getBoundingClientRect();
-      if (!rect || !touch) return;
-
-      const centerX = rect.left + rect.width / 2;
-      const dx = touch.clientX - centerX;
-      const deadzone = rect.width * 0.15;
-
-      if (dx < -deadzone) {
-        onInput({ left: true, right: false });
-      } else if (dx > deadzone) {
-        onInput({ left: false, right: true });
-      } else {
-        onInput({ left: false, right: false });
-      }
+      onInput({
+        left: dx < -deadzone,
+        right: dx > deadzone,
+        up: dy < -deadzone,
+      });
     },
     [onInput],
   );
@@ -62,23 +46,23 @@ export default function TouchControls({ onInput }: TouchControlsProps) {
   const handleJoystickEnd = useCallback(
     (e: React.TouchEvent) => {
       e.preventDefault();
-      onInput({ left: false, right: false });
+      onInput({ left: false, right: false, up: false });
     },
     [onInput],
   );
 
-  const handleActionStart = useCallback(
+  const handlePowerHitStart = useCallback(
     (e: React.TouchEvent) => {
       e.preventDefault();
-      onInput({ up: true });
+      onInput({ powerHit: true });
     },
     [onInput],
   );
 
-  const handleActionEnd = useCallback(
+  const handlePowerHitEnd = useCallback(
     (e: React.TouchEvent) => {
       e.preventDefault();
-      onInput({ up: false });
+      onInput({ powerHit: false });
     },
     [onInput],
   );
@@ -87,30 +71,32 @@ export default function TouchControls({ onInput }: TouchControlsProps) {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 flex items-end justify-between px-4 pb-6 pointer-events-none select-none">
-      {/* 왼쪽: 이동 조이스틱 */}
+      {/* 조이스틱 (4방향) */}
       <div
         ref={joystickRef}
-        className="pointer-events-auto flex h-24 w-36 items-center justify-center rounded-full bg-black/20 backdrop-blur-sm"
-        onTouchStart={handleJoystickStart}
-        onTouchMove={handleJoystickMove}
+        className="pointer-events-auto flex h-32 w-32 items-center justify-center rounded-full bg-black/25 backdrop-blur-sm"
+        onTouchStart={handleJoystick}
+        onTouchMove={handleJoystick}
         onTouchEnd={handleJoystickEnd}
         onTouchCancel={handleJoystickEnd}
       >
-        <div className="flex items-center gap-6">
-          <div className="text-3xl text-white/60 font-bold">&larr;</div>
-          <div className="h-8 w-8 rounded-full bg-white/30" />
-          <div className="text-3xl text-white/60 font-bold">&rarr;</div>
+        <div className="relative flex h-20 w-20 items-center justify-center">
+          <div className="absolute top-0 text-xl text-white/50 font-bold">↑</div>
+          <div className="absolute bottom-0 text-xl text-white/50 font-bold">↓</div>
+          <div className="absolute left-0 text-xl text-white/50 font-bold">←</div>
+          <div className="absolute right-0 text-xl text-white/50 font-bold">→</div>
+          <div className="h-6 w-6 rounded-full bg-white/30" />
         </div>
       </div>
 
-      {/* 오른쪽: 점프/액션 버튼 (원본처럼 하나) */}
+      {/* 파워히트 버튼 (Enter 대용) */}
       <button
-        className="pointer-events-auto flex h-24 w-24 items-center justify-center rounded-full bg-yellow-400/40 text-2xl font-bold text-white/80 backdrop-blur-sm active:bg-yellow-400/60"
-        onTouchStart={handleActionStart}
-        onTouchEnd={handleActionEnd}
-        onTouchCancel={handleActionEnd}
+        className="pointer-events-auto flex h-24 w-24 items-center justify-center rounded-full bg-red-500/40 text-lg font-bold text-white/80 backdrop-blur-sm active:bg-red-500/60"
+        onTouchStart={handlePowerHitStart}
+        onTouchEnd={handlePowerHitEnd}
+        onTouchCancel={handlePowerHitEnd}
       >
-        JUMP
+        HIT
       </button>
     </div>
   );
