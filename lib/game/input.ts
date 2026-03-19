@@ -2,6 +2,7 @@ import { type InputState } from "./types";
 
 export class InputManager {
   private keys: Set<string> = new Set();
+  private touchState: Partial<InputState> = {};
   private boundKeyDown: (e: KeyboardEvent) => void;
   private boundKeyUp: (e: KeyboardEvent) => void;
 
@@ -43,6 +44,10 @@ export class InputManager {
     this.keys.delete(e.key);
   }
 
+  setTouchInput(state: Partial<InputState>) {
+    this.touchState = state;
+  }
+
   getInput(): InputState {
     const left =
       this.keys.has("ArrowLeft") || this.keys.has("a") || this.keys.has("A");
@@ -54,13 +59,18 @@ export class InputManager {
       this.keys.has("w") ||
       this.keys.has("W");
 
-    // powerHit: D키 단독 또는 →+↑ 동시
+    // powerHit: S키 또는 ArrowDown 전용
     const powerHit =
-      this.keys.has("d") ||
-      this.keys.has("D") ||
-      (this.keys.has("ArrowRight") && this.keys.has("ArrowUp"));
+      this.keys.has("s") ||
+      this.keys.has("S") ||
+      this.keys.has("ArrowDown");
 
-    return { left, right, jump, powerHit };
+    return {
+      left: left || !!this.touchState.left,
+      right: right || !!this.touchState.right,
+      jump: jump || !!this.touchState.jump,
+      powerHit: powerHit || !!this.touchState.powerHit,
+    };
   }
 
   isAnyKeyPressed(): boolean {
@@ -69,5 +79,6 @@ export class InputManager {
 
   reset() {
     this.keys.clear();
+    this.touchState = {};
   }
 }

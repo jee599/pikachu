@@ -58,6 +58,7 @@ export class Game {
   phase: GameStateSync['phase'];
   servingSide: PlayerSide;
   inputs: { left: InputState; right: InputState };
+  private tickCounter: number = 0;
 
   constructor() {
     this.score = { left: 0, right: 0 };
@@ -110,6 +111,7 @@ export class Game {
   }
 
   tick(): { scorer: PlayerSide } | null {
+    this.tickCounter++;
     this.updatePlayer(this.player1, this.inputs.left, 'left');
     this.updatePlayer(this.player2, this.inputs.right, 'right');
     this.updateBall();
@@ -257,11 +259,55 @@ export class Game {
       }
     }
 
-    // 프레임 넘버 증가 (애니메이션)
-    player.frameNumber++;
+    // 상태별 프레임 애니메이션
+    this.updatePlayerFrame(player);
 
     // X 경계 제한
     player.x = Math.max(xMin, Math.min(xMax, player.x));
+  }
+
+  private updatePlayerFrame(player: InternalPlayer): void {
+    switch (player.state) {
+      case PlayerState.IDLE: {
+        // Ping-pong 0→4→0, 4틱마다 변경
+        if (this.tickCounter % 4 === 0) {
+          const cycle = Math.floor(this.tickCounter / 4) % 8;
+          player.frameNumber = cycle < 5 ? cycle : 8 - cycle;
+        }
+        break;
+      }
+      case PlayerState.JUMPING:
+        player.frameNumber = (player.frameNumber + 1) % 3;
+        break;
+      case PlayerState.JUMPING_POWER_HIT:
+        // 0~4 순차 증가 후 멈춤
+        if (player.frameNumber < 4) {
+          player.frameNumber++;
+        }
+        break;
+      case PlayerState.DIVING:
+        // 0~1 순환
+        player.frameNumber = (player.frameNumber + 1) % 2;
+        break;
+      case PlayerState.LYING_DOWN:
+        player.frameNumber = 0;
+        break;
+      case PlayerState.WIN_CELEBRATION:
+        // 5틱마다 1 증가, 4에서 멈춤
+        if (this.tickCounter % 5 === 0 && player.frameNumber < 4) {
+          player.frameNumber++;
+        }
+        break;
+      case PlayerState.LOSING:
+        // 5틱마다 1 증가, 4에서 멈춤
+        if (this.tickCounter % 5 === 0 && player.frameNumber < 4) {
+          player.frameNumber++;
+        }
+        break;
+      default:
+        player.frameNumber = 0;
+        break;
+    }
   }
 
   private handlePlayerBallCollision(player: InternalPlayer): void {

@@ -166,7 +166,7 @@ function getPikachuSpriteKey(state: number, frameNumber: number): string {
     6: 5,
   };
   const max = maxFrames[state] ?? 1;
-  const clampedFrame = Math.min(frameNumber, max - 1);
+  const clampedFrame = Math.max(0, Math.min(frameNumber, max - 1));
   return `pikachu/pikachu_${state}_${clampedFrame}.png`;
 }
 

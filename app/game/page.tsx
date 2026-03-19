@@ -4,11 +4,13 @@ import { useEffect, useRef, useState, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import GameCanvas from "@/components/GameCanvas";
 import ScoreBoard from "@/components/ScoreBoard";
+import TouchControls from "@/components/TouchControls";
 import { getSocket } from "@/lib/socket/client";
 import { InputManager } from "@/lib/game/input";
 import { createInitialGameState } from "@/lib/game/engine";
 import {
   type GameState,
+  type InputState,
   type PlayerSide,
   type ServerMessage,
 } from "@/lib/game/types";
@@ -113,6 +115,12 @@ function GameContent() {
     };
   }, [roomId, side, router, handleMessage]);
 
+  const handleTouchInput = useCallback((state: Partial<InputState>) => {
+    if (inputManagerRef.current) {
+      inputManagerRef.current.setTouchInput(state);
+    }
+  }, []);
+
   // 게임오버 시 아무 키로 로비 복귀
   useEffect(() => {
     if (gameState.phase !== "gameOver") return;
@@ -149,10 +157,12 @@ function GameContent() {
       )}
 
       {gameState.phase === "playing" && (
-        <p className="font-mono text-[10px] text-gray-700">
-          Arrows/WASD: move | Up/W/Space: jump | D: power hit
+        <p className="hidden font-mono text-[10px] text-gray-700 sm:block">
+          Arrows/WASD: move | Up/W/Space: jump | S/Down: power hit
         </p>
       )}
+
+      <TouchControls onInput={handleTouchInput} />
     </main>
   );
 }

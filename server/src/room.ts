@@ -1,7 +1,7 @@
 import type { WebSocket } from 'ws';
 import { Game } from './game.js';
 import type { InputState, PlayerSide, ServerMessage, RoomInfo } from './types.js';
-import { TICK_INTERVAL } from './types.js';
+import { TICK_INTERVAL, PlayerState } from './types.js';
 
 interface Player {
   ws: WebSocket;
@@ -64,6 +64,18 @@ function startGameLoop(room: Room): void {
       const gameOver = room.game.isGameOver();
       if (gameOver) {
         room.game.phase = 'gameOver';
+        // 승리/패배 애니메이션 상태 설정
+        if (gameOver.winner === 'left') {
+          room.game.player1.state = PlayerState.WIN_CELEBRATION;
+          room.game.player1.frameNumber = 0;
+          room.game.player2.state = PlayerState.LOSING;
+          room.game.player2.frameNumber = 0;
+        } else {
+          room.game.player2.state = PlayerState.WIN_CELEBRATION;
+          room.game.player2.frameNumber = 0;
+          room.game.player1.state = PlayerState.LOSING;
+          room.game.player1.frameNumber = 0;
+        }
         broadcast(room, {
           type: 'gameOver',
           winner: gameOver.winner,
@@ -74,6 +86,16 @@ function startGameLoop(room: Room): void {
       } else {
         room.game.phase = 'scored';
         room.game.servingSide = scoreEvent.scorer;
+        // 실점한 쪽에 패배 애니메이션
+        if (scoreEvent.scorer === 'left') {
+          // left가 득점 → right가 실점
+          room.game.player2.state = PlayerState.LOSING;
+          room.game.player2.frameNumber = 0;
+        } else {
+          // right가 득점 → left가 실점
+          room.game.player1.state = PlayerState.LOSING;
+          room.game.player1.frameNumber = 0;
+        }
         broadcast(room, {
           type: 'scored',
           scorer: scoreEvent.scorer,

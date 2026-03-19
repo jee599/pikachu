@@ -10,14 +10,32 @@ interface GameCanvasProps {
 
 export default function GameCanvas({ gameState }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<GameState>(gameState);
   const rafRef = useRef<number>(0);
   const [loaded, setLoaded] = useState(false);
+  const [scale, setScale] = useState(2);
 
   stateRef.current = gameState;
 
   useEffect(() => {
     loadAssets().then(() => setLoaded(true));
+  }, []);
+
+  // 반응형 스케일 계산
+  useEffect(() => {
+    const updateScale = () => {
+      const container = containerRef.current;
+      if (!container) return;
+      const containerWidth = container.clientWidth;
+      // 모바일: 화면 너비에 맞추되 최대 2배
+      const newScale = Math.min(containerWidth / GROUND_WIDTH, 2);
+      setScale(newScale);
+    };
+
+    updateScale();
+    window.addEventListener("resize", updateScale);
+    return () => window.removeEventListener("resize", updateScale);
   }, []);
 
   const renderLoop = useCallback(() => {
@@ -37,11 +55,8 @@ export default function GameCanvas({ gameState }: GameCanvasProps) {
     return () => cancelAnimationFrame(rafRef.current);
   }, [loaded, renderLoop]);
 
-  // CSS 스케일링: 원본 해상도의 2배
-  const scale = 2;
-
   return (
-    <div className="flex w-full items-center justify-center">
+    <div ref={containerRef} className="flex w-full items-center justify-center">
       {!loaded && (
         <div
           style={{ width: GROUND_WIDTH * scale, height: GROUND_HEIGHT * scale }}
