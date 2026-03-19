@@ -37,6 +37,7 @@ interface InternalPlayer {
   isCollisionWithBallHappened: boolean;
   lyingDownDurationLeft: number;
   divingDirection: number;
+  prevUpInput: boolean; // 이전 틱의 up 입력 (edge detection)
 }
 
 // 내부 공 상태 (서버 전용)
@@ -68,8 +69,8 @@ export class Game {
     this.player2 = this.createPlayer('right');
     this.ball = this.createBall('left');
     this.inputs = {
-      left: { left: false, right: false, jump: false, powerHit: false },
-      right: { left: false, right: false, jump: false, powerHit: false },
+      left: { left: false, right: false, up: false },
+      right: { left: false, right: false, up: false },
     };
   }
 
@@ -83,6 +84,7 @@ export class Game {
       isCollisionWithBallHappened: false,
       lyingDownDurationLeft: 0,
       divingDirection: 0,
+      prevUpInput: false,
     };
   }
 
@@ -105,8 +107,8 @@ export class Game {
     this.player2 = this.createPlayer('right');
     this.ball = this.createBall(servingSide);
     this.inputs = {
-      left: { left: false, right: false, jump: false, powerHit: false },
-      right: { left: false, right: false, jump: false, powerHit: false },
+      left: { left: false, right: false, up: false },
+      right: { left: false, right: false, up: false },
     };
   }
 
@@ -210,14 +212,17 @@ export class Game {
       return;
     }
 
-    // 지상에 있을 때
-    if (player.y >= PLAYER_TOUCHING_GROUND_Y) {
+    // up 키가 이번 틱에 새로 눌렸는지 (edge detection)
+    const upJustPressed = input.up && !player.prevUpInput;
+
+    // 지상에 있을 때 (yVelocity < 0이면 막 점프한 것이므로 공중 처리)
+    if (player.y >= PLAYER_TOUCHING_GROUND_Y && player.yVelocity >= 0) {
       // 걷기
       if (input.left) player.x -= PLAYER_WALK_SPEED;
       if (input.right) player.x += PLAYER_WALK_SPEED;
 
-      // 점프
-      if (input.jump) {
+      // 점프 (지상에서 ↑ 새로 누름)
+      if (upJustPressed) {
         player.yVelocity = PLAYER_JUMP_VELOCITY;
         player.state = PlayerState.JUMPING;
         player.frameNumber = 0;
@@ -233,20 +238,22 @@ export class Game {
       if (input.left) player.x -= PLAYER_WALK_SPEED;
       if (input.right) player.x += PLAYER_WALK_SPEED;
 
-      // 파워 히트 (점프 중 다시 점프 버튼 → 다이빙)
-      if (input.powerHit && player.state === PlayerState.JUMPING) {
+      // 파워 히트 (공중에서 ↑ 새로 누름)
+      if (upJustPressed && player.state === PlayerState.JUMPING) {
         player.state = PlayerState.JUMPING_POWER_HIT;
         player.frameNumber = 0;
       }
 
-      // 다이빙 트리거
-      if (input.powerHit && player.state === PlayerState.JUMPING_POWER_HIT) {
+      // 다이빙 (파워히트 상태에서 방향키)
+      if (player.state === PlayerState.JUMPING_POWER_HIT) {
         if (input.left) {
           player.state = PlayerState.DIVING;
           player.divingDirection = -1;
+          player.yVelocity = -5;
         } else if (input.right) {
           player.state = PlayerState.DIVING;
           player.divingDirection = 1;
+          player.yVelocity = -5;
         }
       }
 
@@ -258,6 +265,8 @@ export class Game {
         player.frameNumber = 0;
       }
     }
+
+    player.prevUpInput = input.up;
 
     // 상태별 프레임 애니메이션
     this.updatePlayerFrame(player);

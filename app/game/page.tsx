@@ -100,7 +100,7 @@ function GameContent() {
       if (currentState.phase !== "playing") return;
 
       const input = inputManager.getInput();
-      const inputKey = `${input.left}${input.right}${input.jump}${input.powerHit}`;
+      const inputKey = `${input.left}${input.right}${input.up}`;
 
       if (inputKey !== lastInputRef.current) {
         socket.send({ type: "input", input });
@@ -158,7 +158,7 @@ function GameContent() {
 
       {gameState.phase === "playing" && (
         <p className="hidden font-mono text-[10px] text-gray-700 sm:block">
-          Arrows/WASD: move | Up/W/Space: jump | S/Down: power hit
+          Arrows/WASD: move | Up/W/Space: jump (air=power hit)
         </p>
       )}
 

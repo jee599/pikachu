@@ -23,17 +23,7 @@ export class InputManager {
 
   private onKeyDown(e: KeyboardEvent) {
     if (
-      [
-        "ArrowLeft",
-        "ArrowRight",
-        "ArrowUp",
-        "ArrowDown",
-        " ",
-        "w",
-        "a",
-        "s",
-        "d",
-      ].includes(e.key)
+      ["ArrowLeft", "ArrowRight", "ArrowUp", " ", "w", "a", "d"].includes(e.key)
     ) {
       e.preventDefault();
     }
@@ -50,27 +40,23 @@ export class InputManager {
 
   getInput(): InputState {
     const left =
-      this.keys.has("ArrowLeft") || this.keys.has("a") || this.keys.has("A");
+      this.keys.has("ArrowLeft") ||
+      this.keys.has("a") ||
+      this.keys.has("A") ||
+      !!this.touchState.left;
     const right =
-      this.keys.has("ArrowRight") || this.keys.has("d") || this.keys.has("D");
-    const jump =
+      this.keys.has("ArrowRight") ||
+      this.keys.has("d") ||
+      this.keys.has("D") ||
+      !!this.touchState.right;
+    const up =
       this.keys.has("ArrowUp") ||
       this.keys.has(" ") ||
       this.keys.has("w") ||
-      this.keys.has("W");
+      this.keys.has("W") ||
+      !!this.touchState.up;
 
-    // powerHit: S키 또는 ArrowDown 전용
-    const powerHit =
-      this.keys.has("s") ||
-      this.keys.has("S") ||
-      this.keys.has("ArrowDown");
-
-    return {
-      left: left || !!this.touchState.left,
-      right: right || !!this.touchState.right,
-      jump: jump || !!this.touchState.jump,
-      powerHit: powerHit || !!this.touchState.powerHit,
-    };
+    return { left, right, up };
   }
 
   isAnyKeyPressed(): boolean {

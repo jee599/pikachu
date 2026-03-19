@@ -69,8 +69,7 @@ export interface BallSync {
 export interface InputState {
   left: boolean;
   right: boolean;
-  jump: boolean;
-  powerHit: boolean;
+  up: boolean;
 }
 
 export interface GameStateSync {
