@@ -11,7 +11,6 @@ import {
   PLAYER_HALF_LENGTH,
   PLAYER_TOUCHING_GROUND_Y,
   BALL_RADIUS,
-  NET_PILLAR_HALF_WIDTH,
   NET_PILLAR_TOP_TOP_Y,
   NET_PILLAR_TOP_BOTTOM_Y,
   NET_X,
@@ -21,6 +20,12 @@ let spriteSheetImage: HTMLImageElement | null = null;
 let spriteSheetData: SpriteSheet | null = null;
 let assetsLoaded = false;
 let loadingPromise: Promise<void> | null = null;
+
+// 애니메이션 상태
+let frameCount = 0;
+let cloud1X = 20;
+let cloud2X = 170;
+let waveOffset = 0;
 
 export function isAssetsLoaded(): boolean {
   return assetsLoaded;
@@ -62,22 +67,12 @@ function drawSprite(
   dw?: number,
   dh?: number,
 ) {
-  if (!spriteSheetImage || !spriteSheetData) return;
+  if (!spriteSheetImage) return;
   const frame = getFrame(key);
   if (!frame) return;
 
   const { x, y, w, h } = frame.frame;
-  ctx.drawImage(
-    spriteSheetImage,
-    x,
-    y,
-    w,
-    h,
-    dx,
-    dy,
-    dw ?? w,
-    dh ?? h,
-  );
+  ctx.drawImage(spriteSheetImage, x, y, w, h, dx, dy, dw ?? w, dh ?? h);
 }
 
 function drawTiled(
@@ -102,68 +97,72 @@ function drawTiled(
   }
 }
 
-function drawBackground(ctx: CanvasRenderingContext2D) {
-  // 하늘 (sky_blue 타일)
-  drawTiled(ctx, "objects/sky_blue.png", 0, 0, GROUND_WIDTH, GROUND_HEIGHT);
+// ─── 배경 ───
 
-  // 산
-  drawSprite(ctx, "objects/mountain.png", 0, PLAYER_TOUCHING_GROUND_Y - 64);
+const SURFACE_Y = PLAYER_TOUCHING_GROUND_Y + PLAYER_HALF_LENGTH; // 276
 
-  // 바닥 — 노란색 타일 (위쪽 줄)
-  const groundStartY = PLAYER_TOUCHING_GROUND_Y + PLAYER_HALF_LENGTH;
-  drawTiled(
-    ctx,
-    "objects/ground_yellow.png",
-    0,
-    groundStartY,
-    GROUND_WIDTH,
-    16,
-  );
-
-  // 바닥 — 빨간색 타일 (아래쪽)
-  drawTiled(
-    ctx,
-    "objects/ground_red.png",
-    0,
-    groundStartY + 16,
-    GROUND_WIDTH,
-    GROUND_HEIGHT - groundStartY - 16,
-  );
-
-  // 바닥 라인
-  drawSprite(ctx, "objects/ground_line_leftmost.png", 0, groundStartY);
-  for (let x = 16; x < GROUND_WIDTH - 16; x += 16) {
-    drawSprite(ctx, "objects/ground_line.png", x, groundStartY);
-  }
-  drawSprite(
-    ctx,
-    "objects/ground_line_rightmost.png",
-    GROUND_WIDTH - 16,
-    groundStartY,
-  );
+function drawSky(ctx: CanvasRenderingContext2D) {
+  drawTiled(ctx, "objects/sky_blue.png", 0, 0, GROUND_WIDTH, SURFACE_Y);
 }
 
-function drawNet(ctx: CanvasRenderingContext2D) {
-  const pillarX = NET_X - 4; // 네트 기둥 위치 (8px 너비의 중심)
-  const groundStartY = PLAYER_TOUCHING_GROUND_Y + PLAYER_HALF_LENGTH;
+function drawMountain(ctx: CanvasRenderingContext2D) {
+  // 산은 지면 바로 위에 위치 (432x64)
+  drawSprite(ctx, "objects/mountain.png", 0, SURFACE_Y - 64);
+}
 
-  // 네트 기둥 (위에서 아래로 타일)
+function drawClouds(ctx: CanvasRenderingContext2D) {
+  // 구름 2개가 천천히 오른쪽으로 이동
+  drawSprite(ctx, "objects/cloud.png", Math.floor(cloud1X), 35);
+  drawSprite(ctx, "objects/cloud.png", Math.floor(cloud2X), 60);
+}
+
+function drawGround(ctx: CanvasRenderingContext2D) {
+  // 바닥 라인 (표면)
+  drawSprite(ctx, "objects/ground_line_leftmost.png", 0, SURFACE_Y);
+  for (let x = 16; x < GROUND_WIDTH - 16; x += 16) {
+    drawSprite(ctx, "objects/ground_line.png", x, SURFACE_Y);
+  }
+  drawSprite(ctx, "objects/ground_line_rightmost.png", GROUND_WIDTH - 16, SURFACE_Y);
+
+  // 노란색 바닥 (라인 아래 첫 줄)
+  drawTiled(ctx, "objects/ground_yellow.png", 0, SURFACE_Y + 16, GROUND_WIDTH, 16);
+
+  // 빨간색 바닥 (나머지)
+  const redStartY = SURFACE_Y + 32;
+  const redHeight = GROUND_HEIGHT - redStartY;
+  if (redHeight > 0) {
+    drawTiled(ctx, "objects/ground_red.png", 0, redStartY, GROUND_WIDTH, redHeight);
+  }
+}
+
+function drawWaves(ctx: CanvasRenderingContext2D) {
+  // 파도: 화면 하단에 wave 타일이 좌우로 흐르는 애니메이션
+  const waveY = GROUND_HEIGHT - 32;
+  const offset = Math.floor(waveOffset) % 16;
+  for (let x = -16 + offset; x < GROUND_WIDTH + 16; x += 16) {
+    drawSprite(ctx, "objects/wave.png", x, waveY);
+  }
+}
+
+// ─── 네트 ───
+
+function drawNet(ctx: CanvasRenderingContext2D) {
+  const pillarX = NET_X - 4;
+
+  // 네트 기둥 상단
   drawSprite(ctx, "objects/net_pillar_top.png", pillarX, NET_PILLAR_TOP_TOP_Y);
-  for (let y = NET_PILLAR_TOP_BOTTOM_Y; y < groundStartY; y += 8) {
+
+  // 네트 기둥 본체 (top_bottom ~ surface)
+  for (let y = NET_PILLAR_TOP_TOP_Y + 8; y < SURFACE_Y; y += 8) {
     drawSprite(ctx, "objects/net_pillar.png", pillarX, y);
   }
 }
 
+// ─── 피카츄 ───
+
 function getPikachuSpriteKey(state: number, frameNumber: number): string {
-  // 프레임 수 제한
   const maxFrames: Record<number, number> = {
-    0: 5,
-    1: 5,
-    2: 5,
-    3: 2,
-    4: 1,
-    5: 5,
-    6: 5,
+    0: 5, 1: 5, 2: 5, 3: 2, 4: 1, 5: 5, 6: 5,
   };
   const max = maxFrames[state] ?? 1;
   const clampedFrame = Math.max(0, Math.min(frameNumber, max - 1));
@@ -180,60 +179,36 @@ function drawPlayer(
   if (!frame || !spriteSheetImage) return;
 
   const { x: sx, y: sy, w: sw, h: sh } = frame.frame;
-
-  // 피카츄의 중심 좌표에서 그리기 위치 계산
   const dx = player.x - PLAYER_HALF_LENGTH;
   const dy = player.y - PLAYER_LENGTH + PLAYER_HALF_LENGTH;
 
   ctx.save();
 
   if (isP2) {
-    // P2는 좌우 반전
     ctx.translate(player.x, 0);
     ctx.scale(-1, 1);
-    ctx.drawImage(
-      spriteSheetImage,
-      sx,
-      sy,
-      sw,
-      sh,
-      -PLAYER_HALF_LENGTH,
-      dy,
-      PLAYER_LENGTH,
-      PLAYER_LENGTH,
-    );
+    ctx.drawImage(spriteSheetImage, sx, sy, sw, sh, -PLAYER_HALF_LENGTH, dy, PLAYER_LENGTH, PLAYER_LENGTH);
   } else {
-    ctx.drawImage(
-      spriteSheetImage,
-      sx,
-      sy,
-      sw,
-      sh,
-      dx,
-      dy,
-      PLAYER_LENGTH,
-      PLAYER_LENGTH,
-    );
+    ctx.drawImage(spriteSheetImage, sx, sy, sw, sh, dx, dy, PLAYER_LENGTH, PLAYER_LENGTH);
   }
 
   ctx.restore();
 }
 
 function drawShadow(ctx: CanvasRenderingContext2D, x: number) {
-  const groundY = PLAYER_TOUCHING_GROUND_Y + PLAYER_HALF_LENGTH;
-  drawSprite(ctx, "objects/shadow.png", x - 16, groundY - 4);
+  drawSprite(ctx, "objects/shadow.png", x - 16, SURFACE_Y - 4);
 }
+
+// ─── 공 ───
 
 function drawBall(ctx: CanvasRenderingContext2D, ball: BallSync) {
   if (!spriteSheetImage) return;
 
+  // 회전 프레임 결정
   let spriteKey: string;
-
   if (ball.fineRotation === 50) {
-    // 하이퍼볼
     spriteKey = "ball/ball_hyper.png";
   } else {
-    // 일반 회전 (0~4)
     const rotFrame = Math.abs(ball.rotation) % 5;
     spriteKey = `ball/ball_${rotFrame}.png`;
   }
@@ -243,68 +218,49 @@ function drawBall(ctx: CanvasRenderingContext2D, ball: BallSync) {
 
   const { x: sx, y: sy, w: sw, h: sh } = frame.frame;
 
-  // 파워히트 잔상
+  // 파워히트 잔상 (이전 위치에 반투명으로)
   if (ball.isPowerHit) {
     const trailFrame = getFrame("ball/ball_trail.png");
     if (trailFrame) {
-      ctx.globalAlpha = 0.5;
+      ctx.globalAlpha = 0.4;
       ctx.drawImage(
         spriteSheetImage,
-        trailFrame.frame.x,
-        trailFrame.frame.y,
-        trailFrame.frame.w,
-        trailFrame.frame.h,
-        ball.x - BALL_RADIUS - ball.xVelocity,
-        ball.y - BALL_RADIUS - ball.yVelocity,
-        40,
-        40,
+        trailFrame.frame.x, trailFrame.frame.y,
+        trailFrame.frame.w, trailFrame.frame.h,
+        ball.x - BALL_RADIUS - ball.xVelocity * 0.5,
+        ball.y - BALL_RADIUS - ball.yVelocity * 0.5,
+        40, 40,
       );
       ctx.globalAlpha = 1;
     }
   }
 
-  ctx.drawImage(
-    spriteSheetImage,
-    sx,
-    sy,
-    sw,
-    sh,
-    ball.x - BALL_RADIUS,
-    ball.y - BALL_RADIUS,
-    40,
-    40,
-  );
+  // 공 본체
+  ctx.drawImage(spriteSheetImage, sx, sy, sw, sh, ball.x - BALL_RADIUS, ball.y - BALL_RADIUS, 40, 40);
 
-  // 파워히트 이펙트
-  if (ball.isPowerHit) {
+  // 펀치 이펙트 (punchEffectX/Y 좌표에 표시)
+  if (ball.isPowerHit && ball.punchEffectX > 0) {
     const punchFrame = getFrame("ball/ball_punch.png");
     if (punchFrame) {
       ctx.drawImage(
         spriteSheetImage,
-        punchFrame.frame.x,
-        punchFrame.frame.y,
-        punchFrame.frame.w,
-        punchFrame.frame.h,
-        ball.x - BALL_RADIUS,
-        ball.y - BALL_RADIUS,
-        40,
-        40,
+        punchFrame.frame.x, punchFrame.frame.y,
+        punchFrame.frame.w, punchFrame.frame.h,
+        ball.punchEffectX - BALL_RADIUS,
+        ball.punchEffectY - BALL_RADIUS,
+        40, 40,
       );
     }
   }
 }
 
 function drawBallShadow(ctx: CanvasRenderingContext2D, ballX: number) {
-  const groundY = PLAYER_TOUCHING_GROUND_Y + PLAYER_HALF_LENGTH;
-  drawSprite(ctx, "objects/shadow.png", ballX - 16, groundY - 4);
+  drawSprite(ctx, "objects/shadow.png", ballX - 16, SURFACE_Y - 4);
 }
 
-function drawScoreNumber(
-  ctx: CanvasRenderingContext2D,
-  num: number,
-  x: number,
-  y: number,
-) {
+// ─── 점수 ───
+
+function drawScoreNumber(ctx: CanvasRenderingContext2D, num: number, x: number, y: number) {
   if (num < 10) {
     drawSprite(ctx, `number/number_${num}.png`, x, y);
   } else {
@@ -315,26 +271,20 @@ function drawScoreNumber(
   }
 }
 
-function drawScore(
-  ctx: CanvasRenderingContext2D,
-  score: { left: number; right: number },
-) {
-  // P1 스코어 — 왼쪽 상단
+function drawScore(ctx: CanvasRenderingContext2D, score: { left: number; right: number }) {
   drawScoreNumber(ctx, score.left, 68, 8);
-  // P2 스코어 — 오른쪽 상단
   drawScoreNumber(ctx, score.right, GROUND_WIDTH - 68 - 32, 8);
 }
 
-function drawMessage(
-  ctx: CanvasRenderingContext2D,
-  messageKey: string,
-) {
+// ─── 메시지 ───
+
+function drawMessage(ctx: CanvasRenderingContext2D, messageKey: string) {
   const frame = getFrame(messageKey);
   if (!frame || !spriteSheetImage) return;
 
   const { x: sx, y: sy, w: sw, h: sh } = frame.frame;
   const dx = (GROUND_WIDTH - sw) / 2;
-  const dy = (GROUND_HEIGHT - sh) / 2 - 20;
+  const dy = (GROUND_HEIGHT - sh) / 2 - 40;
 
   ctx.drawImage(spriteSheetImage, sx, sy, sw, sh, dx, dy, sw, sh);
 }
@@ -348,68 +298,60 @@ function drawWaitingText(ctx: CanvasRenderingContext2D) {
   ctx.font = "bold 14px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(
-    "Waiting for opponent...",
-    GROUND_WIDTH / 2,
-    GROUND_HEIGHT / 2,
-  );
+  ctx.fillText("Waiting for opponent...", GROUND_WIDTH / 2, GROUND_HEIGHT / 2);
   ctx.restore();
 }
 
-function drawGameOverOverlay(
-  ctx: CanvasRenderingContext2D,
-  winner: string,
-  score: { left: number; right: number },
-) {
+function drawGameOverOverlay(ctx: CanvasRenderingContext2D, winner: string) {
   ctx.save();
   ctx.fillStyle = "rgba(0,0,0,0.6)";
   ctx.fillRect(0, 0, GROUND_WIDTH, GROUND_HEIGHT);
 
-  // "GAME END" 메시지 (스프라이트)
   drawMessage(ctx, "messages/common/game_end.png");
 
   ctx.fillStyle = "#FFD700";
   ctx.font = "bold 16px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(
-    `${winner} WINS!`,
-    GROUND_WIDTH / 2,
-    GROUND_HEIGHT / 2 + 20,
-  );
+  ctx.fillText(`${winner} WINS!`, GROUND_WIDTH / 2, GROUND_HEIGHT / 2 + 20);
 
   ctx.font = "10px sans-serif";
   ctx.fillStyle = "#AAA";
-  ctx.fillText(
-    "Press any key to return",
-    GROUND_WIDTH / 2,
-    GROUND_HEIGHT / 2 + 50,
-  );
+  ctx.fillText("Press any key to return", GROUND_WIDTH / 2, GROUND_HEIGHT / 2 + 50);
   ctx.restore();
 }
+
+// ─── 메인 렌더 ───
 
 export function render(ctx: CanvasRenderingContext2D, state: GameState) {
   if (!assetsLoaded) return;
 
+  frameCount++;
+
+  // 애니메이션 업데이트
+  cloud1X += 0.3;
+  cloud2X += 0.15;
+  if (cloud1X > GROUND_WIDTH) cloud1X = -48;
+  if (cloud2X > GROUND_WIDTH) cloud2X = -48;
+  waveOffset += 0.5;
+
   ctx.clearRect(0, 0, GROUND_WIDTH, GROUND_HEIGHT);
 
-  // 배경
-  drawBackground(ctx);
-
-  // 네트
+  // 레이어 순서 (원본 동일): 하늘 → 구름 → 산 → 바닥 → 파도 → 네트
+  drawSky(ctx);
+  drawClouds(ctx);
+  drawMountain(ctx);
+  drawGround(ctx);
+  drawWaves(ctx);
   drawNet(ctx);
 
-  if (
-    state.phase === "playing" ||
-    state.phase === "scored" ||
-    state.phase === "gameOver"
-  ) {
-    // 그림자
+  if (state.phase === "playing" || state.phase === "scored" || state.phase === "gameOver") {
+    // 그림자 (캐릭터/공 아래)
     drawShadow(ctx, state.player1.x);
     drawShadow(ctx, state.player2.x);
     drawBallShadow(ctx, state.ball.x);
 
-    // 피카츄
+    // 캐릭터
     drawPlayer(ctx, state.player1, false);
     drawPlayer(ctx, state.player2, true);
 
@@ -421,16 +363,20 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState) {
   }
 
   if (state.phase === "waiting") {
+    // waiting에서도 피카츄와 공을 그림 (배경 위에)
+    drawShadow(ctx, state.player1.x);
+    drawShadow(ctx, state.player2.x);
+    drawPlayer(ctx, state.player1, false);
+    drawPlayer(ctx, state.player2, true);
     drawWaitingText(ctx);
   }
 
   if (state.phase === "scored") {
-    // "READY" 메시지 표시
     drawMessage(ctx, "messages/common/ready.png");
   }
 
   if (state.phase === "gameOver" && state.winner) {
     const winnerLabel = state.winner === state.mySide ? "YOU" : "OPPONENT";
-    drawGameOverOverlay(ctx, winnerLabel, state.score);
+    drawGameOverOverlay(ctx, winnerLabel);
   }
 }

@@ -10,6 +10,11 @@ import {
 } from "@/lib/game/types";
 import { render, loadAssets, isAssetsLoaded } from "@/lib/game/renderer";
 
+// 내부 캔버스는 2x 해상도로 그려서 스프라이트 보간을 매끄럽게
+const RENDER_SCALE = 2;
+const CANVAS_W = GROUND_WIDTH * RENDER_SCALE;
+const CANVAS_H = GROUND_HEIGHT * RENDER_SCALE;
+
 interface GameCanvasProps {
   gameState: GameState;
 }
@@ -47,15 +52,13 @@ export default function GameCanvas({ gameState }: GameCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
   const [loaded, setLoaded] = useState(false);
-  const [scale, setScale] = useState(2);
+  const [cssScale, setCssScale] = useState(1);
 
-  // 보간용: 이전 상태 + 현재 상태 + 수신 시각
   const prevStateRef = useRef<GameState>(gameState);
   const currStateRef = useRef<GameState>(gameState);
   const lastUpdateTimeRef = useRef<number>(performance.now());
-  const SERVER_TICK_MS = 40; // 25fps
+  const SERVER_TICK_MS = 40;
 
-  // 새 서버 상태가 들어오면 prev/curr 교체
   useEffect(() => {
     prevStateRef.current = currStateRef.current;
     currStateRef.current = gameState;
@@ -70,11 +73,10 @@ export default function GameCanvas({ gameState }: GameCanvasProps) {
     const updateScale = () => {
       const container = containerRef.current;
       if (!container) return;
-      const containerWidth = container.clientWidth;
-      const newScale = Math.min(containerWidth / GROUND_WIDTH, 2);
-      setScale(newScale);
+      // CSS 표시 크기: 컨테이너에 맞추되 원본의 최대 2배
+      const maxDisplayW = Math.min(container.clientWidth, GROUND_WIDTH * 2);
+      setCssScale(maxDisplayW / CANVAS_W);
     };
-
     updateScale();
     window.addEventListener("resize", updateScale);
     return () => window.removeEventListener("resize", updateScale);
@@ -93,12 +95,13 @@ export default function GameCanvas({ gameState }: GameCanvasProps) {
       return;
     }
 
+    ctx.imageSmoothingEnabled = false;
+
     const prev = prevStateRef.current;
     const curr = currStateRef.current;
     const elapsed = performance.now() - lastUpdateTimeRef.current;
     const t = Math.min(elapsed / SERVER_TICK_MS, 1);
 
-    // playing/scored/gameOver일 때만 보간 (waiting은 그대로)
     let renderState: GameState;
     if (curr.phase === "playing" || curr.phase === "scored" || curr.phase === "gameOver") {
       renderState = {
@@ -111,7 +114,12 @@ export default function GameCanvas({ gameState }: GameCanvasProps) {
       renderState = curr;
     }
 
+    // 2x 스케일로 렌더링
+    ctx.save();
+    ctx.scale(RENDER_SCALE, RENDER_SCALE);
     render(ctx, renderState);
+    ctx.restore();
+
     rafRef.current = requestAnimationFrame(renderLoop);
   }, []);
 
@@ -125,7 +133,7 @@ export default function GameCanvas({ gameState }: GameCanvasProps) {
     <div ref={containerRef} className="flex w-full items-center justify-center">
       {!loaded && (
         <div
-          style={{ width: GROUND_WIDTH * scale, height: GROUND_HEIGHT * scale }}
+          style={{ width: CANVAS_W * cssScale, height: CANVAS_H * cssScale }}
           className="flex items-center justify-center bg-black text-gray-500"
         >
           Loading sprites...
@@ -133,12 +141,12 @@ export default function GameCanvas({ gameState }: GameCanvasProps) {
       )}
       <canvas
         ref={canvasRef}
-        width={GROUND_WIDTH}
-        height={GROUND_HEIGHT}
+        width={CANVAS_W}
+        height={CANVAS_H}
         className="block"
         style={{
-          width: GROUND_WIDTH * scale,
-          height: GROUND_HEIGHT * scale,
+          width: CANVAS_W * cssScale,
+          height: CANVAS_H * cssScale,
           imageRendering: "pixelated",
           display: loaded ? "block" : "none",
         }}
