@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #000000;
+  color: #ffffff;
+}
+
+/* 레트로 버튼 스타일 */
+.retro-btn {
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  font-family: monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.1s;
+}
+
+.retro-btn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.retro-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* 캔버스 픽셀 선명도 보장 */
+canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
