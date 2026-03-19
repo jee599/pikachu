@@ -17,7 +17,6 @@ export const NET_PILLAR_TOP_BOTTOM_Y = 192;
 
 export const PLAYER1_INITIAL_X = 36;
 export const PLAYER2_INITIAL_X = 396;
-export const BALL_INITIAL_Y = 10;
 export const BALL_P1_SERVE_X = 56;
 export const BALL_P2_SERVE_X = 376;
 

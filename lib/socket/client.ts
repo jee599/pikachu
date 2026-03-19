@@ -1,6 +1,6 @@
 import { type ClientMessage, type ServerMessage } from "@/lib/game/types";
 
-const WS_URL = "ws://localhost:3001";
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:3001";
 
 export type MessageHandler = (message: ServerMessage) => void;
 export type ConnectionHandler = () => void;

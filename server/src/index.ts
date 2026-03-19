@@ -1,12 +1,26 @@
+import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { createRoom, joinRoom, handleInput, handleDisconnect } from './room.js';
 import type { ClientMessage } from './types.js';
 
-const PORT = 3001;
+const PORT = Number(process.env.PORT) || 3001;
 
-const wss = new WebSocketServer({ port: PORT });
+// HTTP 서버: Railway health check용
+const server = createServer((req, res) => {
+  if (req.url === '/' || req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok', uptime: process.uptime() }));
+  } else {
+    res.writeHead(404);
+    res.end();
+  }
+});
 
-console.log(`Pikachu Volleyball server listening on ws://localhost:${PORT}`);
+const wss = new WebSocketServer({ server });
+
+server.listen(PORT, () => {
+  console.log(`Pikachu Volleyball server listening on port ${PORT}`);
+});
 
 wss.on('connection', (ws) => {
   console.log(`Client connected (total: ${wss.clients.size})`);
