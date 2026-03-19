@@ -37,7 +37,8 @@ interface InternalPlayer {
   isCollisionWithBallHappened: boolean;
   lyingDownDurationLeft: number;
   divingDirection: number;
-  prevUpInput: boolean; // 이전 틱의 up 입력 (edge detection)
+  prevUpInput: boolean;
+  powerHitTicks: number; // 파워히트 상태 진입 후 경과 틱
 }
 
 // 내부 공 상태 (서버 전용)
@@ -85,6 +86,7 @@ export class Game {
       lyingDownDurationLeft: 0,
       divingDirection: 0,
       prevUpInput: false,
+      powerHitTicks: 0,
     };
   }
 
@@ -242,18 +244,22 @@ export class Game {
       if (upJustPressed && player.state === PlayerState.JUMPING) {
         player.state = PlayerState.JUMPING_POWER_HIT;
         player.frameNumber = 0;
+        player.powerHitTicks = 0;
       }
 
-      // 다이빙 (파워히트 상태에서 방향키)
+      // 다이빙 (파워히트 2틱 이후 + 방향키 입력)
       if (player.state === PlayerState.JUMPING_POWER_HIT) {
-        if (input.left) {
-          player.state = PlayerState.DIVING;
-          player.divingDirection = -1;
-          player.yVelocity = -5;
-        } else if (input.right) {
-          player.state = PlayerState.DIVING;
-          player.divingDirection = 1;
-          player.yVelocity = -5;
+        player.powerHitTicks++;
+        if (player.powerHitTicks > 2) {
+          if (input.left) {
+            player.state = PlayerState.DIVING;
+            player.divingDirection = -1;
+            player.yVelocity = -5;
+          } else if (input.right) {
+            player.state = PlayerState.DIVING;
+            player.divingDirection = 1;
+            player.yVelocity = -5;
+          }
         }
       }
 

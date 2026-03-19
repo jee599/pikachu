@@ -158,7 +158,7 @@ function GameContent() {
 
       {gameState.phase === "playing" && (
         <p className="hidden font-mono text-[10px] text-gray-700 sm:block">
-          Arrows/WASD: move | Up/W/Space: jump (air=power hit)
+          ←→/AD: move | ↑/W/Space/Enter: jump (air=spike)
         </p>
       )}
 

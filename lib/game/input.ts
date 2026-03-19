@@ -23,7 +23,7 @@ export class InputManager {
 
   private onKeyDown(e: KeyboardEvent) {
     if (
-      ["ArrowLeft", "ArrowRight", "ArrowUp", " ", "w", "a", "d"].includes(e.key)
+      ["ArrowLeft", "ArrowRight", "ArrowUp", " ", "w", "a", "d", "Enter"].includes(e.key)
     ) {
       e.preventDefault();
     }
@@ -54,6 +54,7 @@ export class InputManager {
       this.keys.has(" ") ||
       this.keys.has("w") ||
       this.keys.has("W") ||
+      this.keys.has("Enter") ||
       !!this.touchState.up;
 
     return { left, right, up };
